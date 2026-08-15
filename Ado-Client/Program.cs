@@ -1,28 +1,29 @@
-﻿using Microsoft.Data.SqlClient; // Подключаем библиотеку для работы с SQL
+﻿using Microsoft.Data.SqlClient;
 
 namespace AdoNetTrainee
 {
     internal class Program
     {
-        // ЭТО СТРОКА ПОДКЛЮЧЕНИЯ (Connection String)
-        // Она говорит программе, где лежит база данных
         static string connectionString = @"Data Source=(localdb)\MSSQLLocalDB;Initial Catalog=TraineeDB;Integrated Security=True;";
+        static UserRepository repository = new UserRepository(connectionString);
 
         static void Main(string[] args)
         {
-            Console.WriteLine("🏢 ДОБРО ПОЖАЛОВАТЬ В СИСТЕМУ УПРАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯМИ");
+            Console.WriteLine("🏢 СИСТЕМА УПРАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯМИ (ADO.NET)");
             Console.WriteLine("===================================================\n");
 
             bool exit = false;
 
-            while (!exit) // Бесконечный цикл, пока пользователь не выберет "Выход"
+            while (!exit)
             {
                 Console.WriteLine("\nВыберите действие:");
                 Console.WriteLine("1 - Показать всех пользователей");
                 Console.WriteLine("2 - Добавить нового пользователя");
                 Console.WriteLine("3 - Найти пользователя по Id");
-                Console.WriteLine("4 - Удалить пользователя по Id");
-                Console.WriteLine("5 - Выход");
+                Console.WriteLine("4 - Найти пользователя по Name");
+                Console.WriteLine("5 - Обновить пользователя");
+                Console.WriteLine("6 - Удалить пользователя по Id");
+                Console.WriteLine("7 - Выход");
                 Console.Write("\nВаш выбор: ");
 
                 string choice = Console.ReadLine();
@@ -35,26 +36,26 @@ namespace AdoNetTrainee
                         break;
 
                     case "2":
-                        Console.Write("Введите имя: ");
-                        string name = Console.ReadLine();
-                        Console.Write("Введите возраст: ");
-                        int age = int.Parse(Console.ReadLine());
-                        AddUser(name, age);
+                        AddNewUser();
                         break;
 
                     case "3":
-                        Console.Write("Введите Id: ");
-                        int idFind = int.Parse(Console.ReadLine());
-                        FindUserById(idFind);
+                        FindUserById();
                         break;
 
                     case "4":
-                        Console.Write("Введите Id: ");
-                        int idDelete = int.Parse(Console.ReadLine());
-                        DeleteUser(idDelete);
+                        FindUserByName();
                         break;
 
                     case "5":
+                        UpdateUser();
+                        break;
+
+                    case "6":
+                        DeleteUser();
+                        break;
+
+                    case "7":
                         exit = true;
                         Console.WriteLine("До свидания!");
                         break;
@@ -66,119 +67,148 @@ namespace AdoNetTrainee
             }
         }
 
-        // МЕТОД ДЛЯ ДОБАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯ
-        static void AddUser(string name, int age)
-        {
-            // using - это волшебная конструкция. Она гарантирует, что соединение с БД закроется АВТОМАТИЧЕСКИ, даже если будет ошибка.
-            using (SqlConnection connection = new SqlConnection(connectionString))
-            {
-                // Открываем дверь в базу данных
-                connection.Open();
-
-                // SQL-запрос. @Name и @Age - это "параметры". Никогда НЕ склеивай строки с именами через +, это опасно (SQL-инъекции)!
-                string sqlQuery = "INSERT INTO Users (Name, Age) VALUES (@Name, @Age)";
-
-                // SqlCommand - это наша инструкция для базы
-                using (SqlCommand command = new SqlCommand(sqlQuery, connection))
-                {
-                    // Подставляем реальные значения вместо @Name и @Age
-                    command.Parameters.AddWithValue("@Name", name);
-                    command.Parameters.AddWithValue("@Age", age);
-
-                    // Выполняем команду. ExecuteNonQuery - для команд, которые ничего не возвращают (INSERT, UPDATE, DELETE).
-                    int rowsAffected = command.ExecuteNonQuery();
-
-                    Console.WriteLine($"Добавлено строк: {rowsAffected}");
-                }
-            } // Здесь connection автоматически закроется (даже если была ошибка)
-        }
-
-        // МЕТОД УДАЛЕНИЯ ПОЛЬЗОВАТЕЛЯ
-        static void DeleteUser(int id)
-        {
-            using (SqlConnection connection = new SqlConnection(connectionString))
-            {
-                connection.Open();
-
-                string sqlQuery = "DELETE FROM Users WHERE Id = @Id";
-
-                using (SqlCommand command = new SqlCommand(sqlQuery, connection))
-                {
-
-                    command.Parameters.AddWithValue("@Id", id);
-
-                    int rowsAffected = command.ExecuteNonQuery();
-
-                    Console.WriteLine($"Строка удалена: {rowsAffected}");
-                }
-            }
-        }
-
-        // МЕТОД ЗАПРОСА НА ПОКАЗ ПОЛЬЗОВАТЕЛЕЙ ИЗ ТАБЛИЦЫ
         static void ShowAllUsers()
         {
-            using (SqlConnection connection = new SqlConnection(connectionString))
+            var users = repository.GetAllUsers();
+
+            if (users.Count == 0)
             {
-                connection.Open();
+                Console.WriteLine("📭 В базе нет пользователей.");
+                return;
+            }
 
-                string sqlQuery = "SELECT Id, Name, Age FROM Users ORDER BY Id";
+            Console.WriteLine("\n📋 СПИСОК ПОЛЬЗОВАТЕЛЕЙ:");
+            Console.WriteLine("┌─────┬──────────────┬─────┐");
+            Console.WriteLine("│ Id  │ Name         │ Age │");
+            Console.WriteLine("├─────┼──────────────┼─────┤");
 
-                using (SqlCommand command = new SqlCommand(sqlQuery, connection))
-                {
-                    // SqlDataReader - это "курсор", который идет по строкам результата
-                    using (SqlDataReader reader = command.ExecuteReader())
-                    {
-                        Console.WriteLine("\n📋 СПИСОК ПОЛЬЗОВАТЕЛЕЙ:");
-                        Console.WriteLine("┌─────┬──────────────┬─────┐");
-                        Console.WriteLine("│ Id  │ Name         │ Age │");
-                        Console.WriteLine("├─────┼──────────────┼─────┤");
+            foreach (var user in users)
+            {
+                Console.WriteLine($"│ {user.Id,-3} │ {user.Name,-12} │ {user.Age,3} │");
+            }
 
-                        while (reader.Read()) // Читаем построчно, пока есть данные
-                        {
-                            int id = reader.GetInt32(0);        // Первая колонка (Id)
-                            string name = reader.GetString(1);  // Вторая колонка (Name)
-                            int age = reader.GetInt32(2);       // Третья колонка (Age)
+            Console.WriteLine("└─────┴──────────────┴─────┘");
+        }
 
-                            Console.WriteLine($"│ {id,-3} │ {name,-12} │ {age,3} │");
-                        }
+        static void AddNewUser()
+        {
+            try
+            {
+                Console.Write("Введите имя: ");
+                string name = Console.ReadLine();
 
-                        Console.WriteLine("└─────┴──────────────┴─────┘");
-                    }
-                }
+                Console.Write("Введите возраст: ");
+                int age = int.Parse(Console.ReadLine());
+
+                int newId = repository.AddUser(name, age);
+                Console.WriteLine($"✅ Пользователь добавлен с Id: {newId}");
+            }
+            catch (FormatException)
+            {
+                Console.WriteLine("❌ Ошибка: возраст должен быть числом!");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка: {ex.Message}");
             }
         }
 
-        // МЕТОД ПОИСКА ПОЛЬЗОВАТЕЛЯ ПО "ID"
-        static void FindUserById(int id)
+        static void FindUserById()
         {
-            using (SqlConnection connection = new SqlConnection(connectionString))
+            try
             {
-                connection.Open();
+                Console.Write("Введите Id: ");
+                int id = int.Parse(Console.ReadLine());
 
-                string sqlQuery = "SELECT Id, Name, Age FROM Users WHERE Id = @Id";
+                var user = repository.GetUserById(id);
 
-                using (SqlCommand command = new SqlCommand(sqlQuery, connection))
+                if (user != null)
                 {
-                    command.Parameters.AddWithValue("@Id", id);
-
-                    using (SqlDataReader reader = command.ExecuteReader())
-                    {
-                        if (reader.Read()) // Если есть хотя бы одна строка
-                        {
-                            string name = reader.GetString(1);
-                            int age = reader.GetInt32(2);
-
-                            Console.WriteLine($"\n🔍 НАЙДЕН ПОЛЬЗОВАТЕЛЬ:");
-                            Console.WriteLine($"Id: {id}");
-                            Console.WriteLine($"Имя: {name}");
-                            Console.WriteLine($"Возраст: {age}");
-                        }
-                        else
-                        {
-                            Console.WriteLine($"\n⚠️ Пользователь с Id={id} не найден.");
-                        }
-                    }
+                    Console.WriteLine($"\n🔍 НАЙДЕН ПОЛЬЗОВАТЕЛЬ:");
+                    Console.WriteLine($"Id: {user.Id}");
+                    Console.WriteLine($"Имя: {user.Name}");
+                    Console.WriteLine($"Возраст: {user.Age}");
                 }
+                else
+                {
+                    Console.WriteLine($"\n⚠️ Пользователь с Id={id} не найден.");
+                }
+            }
+            catch (FormatException)
+            {
+                Console.WriteLine("❌ Ошибка: Id должен быть числом!");
+            }
+        }
+
+        static void FindUserByName()
+        {
+            try
+            {
+                Console.Write("Введите имя (name): ");
+                string name = Console.ReadLine();
+
+                var user = repository.GetUserByName(name);
+
+                if (user != null)
+                {
+                    Console.WriteLine($"\n🔍 НАЙДЕН ПОЛЬЗОВАТЕЛЬ:");
+                    Console.WriteLine($"Id: {user.Id}");
+                    Console.WriteLine($"Имя: {user.Name}");
+                    Console.WriteLine($"Возраст: {user.Age}");
+                }
+                else
+                {
+                    Console.WriteLine($"\n⚠️ Пользователь с Name={name} не найден.");
+                }
+            }
+            catch (FormatException)
+            {
+                Console.WriteLine("❌ Ошибка: некоектное имя!");
+            }
+        }
+        static void UpdateUser()
+        {
+            try
+            {
+                Console.Write("Введите Id пользователя для обновления: ");
+                int id = int.Parse(Console.ReadLine());
+
+                Console.Write("Введите новое имя: ");
+                string name = Console.ReadLine();
+
+                Console.Write("Введите новый возраст: ");
+                int age = int.Parse(Console.ReadLine());
+
+                bool updated = repository.UpdateUser(id, name, age);
+
+                if (updated)
+                    Console.WriteLine($"✅ Пользователь с Id={id} обновлен!");
+                else
+                    Console.WriteLine($"⚠️ Пользователь с Id={id} не найден.");
+            }
+            catch (FormatException)
+            {
+                Console.WriteLine("❌ Ошибка: введите корректные данные!");
+            }
+        }
+
+        static void DeleteUser()
+        {
+            try
+            {
+                Console.Write("Введите Id для удаления: ");
+                int id = int.Parse(Console.ReadLine());
+
+                bool deleted = repository.DeleteUser(id);
+
+                if (deleted)
+                    Console.WriteLine($"✅ Пользователь с Id={id} удален!");
+                else
+                    Console.WriteLine($"⚠️ Пользователь с Id={id} не найден.");
+            }
+            catch (FormatException)
+            {
+                Console.WriteLine("❌ Ошибка: Id должен быть числом!");
             }
         }
     }
