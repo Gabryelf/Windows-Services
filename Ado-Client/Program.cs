@@ -1,4 +1,5 @@
 ﻿using Microsoft.Data.SqlClient;
+using System.Data;
 
 namespace AdoNetTrainee
 {
@@ -7,9 +8,9 @@ namespace AdoNetTrainee
         static string connectionString = @"Data Source=(localdb)\MSSQLLocalDB;Initial Catalog=TraineeDB;Integrated Security=True;";
         static UserRepository repository = new UserRepository(connectionString);
 
-        static void Main(string[] args)
+        static async Task Main(string[] args)  // <--- Main теперь async
         {
-            Console.WriteLine("🏢 СИСТЕМА УПРАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯМИ (ADO.NET)");
+            Console.WriteLine("🏢 СИСТЕМА УПРАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯМИ (ADO.NET + ASYNC)");
             Console.WriteLine("===================================================\n");
 
             bool exit = false;
@@ -32,27 +33,31 @@ namespace AdoNetTrainee
                 switch (choice)
                 {
                     case "1":
-                        ShowAllUsers();
+                        //await ShowAllUsersAsync();
+                        // вызываем альтернативный метод
+                        await ShowUsersAsDataTableAsync();
                         break;
 
                     case "2":
-                        AddNewUser();
+                        await AddNewUserAsync();
                         break;
 
                     case "3":
-                        FindUserById();
+                        await FindUserByIdAsync();
                         break;
 
                     case "4":
-                        FindUserByName();
+                        //await FindUserByNameAsync();
+                        // вызываем альтернативный метод
+                        await SearchUsersByNameAsync();
                         break;
 
                     case "5":
-                        UpdateUser();
+                        await UpdateUserAsync();
                         break;
 
                     case "6":
-                        DeleteUser();
+                        await DeleteUserAsync();
                         break;
 
                     case "7":
@@ -67,9 +72,9 @@ namespace AdoNetTrainee
             }
         }
 
-        static void ShowAllUsers()
+        static async Task ShowAllUsersAsync()
         {
-            var users = repository.GetAllUsers();
+            var users = await repository.GetAllUsersAsync();
 
             if (users.Count == 0)
             {
@@ -90,7 +95,39 @@ namespace AdoNetTrainee
             Console.WriteLine("└─────┴──────────────┴─────┘");
         }
 
-        static void AddNewUser()
+        // Дополнительный метод с использованием альтернативного DataTable
+        static async Task ShowUsersAsDataTableAsync()
+        {
+            // Получаем DataTable
+            DataTable dt = await repository.GetUsersAsDataTableAsync();
+
+            if (dt.Rows.Count == 0)
+            {
+                Console.WriteLine("📭 В базе нет пользователей.");
+                return;
+            }
+
+            Console.WriteLine("\n📋 СПИСОК ПОЛЬЗОВАТЕЛЕЙ (DataTable):");
+            Console.WriteLine("┌─────┬──────────────┬─────┐");
+            Console.WriteLine("│ Id  │ Name         │ Age │");
+            Console.WriteLine("├─────┼──────────────┼─────┤");
+
+            // Проходим по каждой строке в DataTable
+            foreach (DataRow row in dt.Rows)
+            {
+                // row["Id"] - обращение по имени колонки
+                // Convert.ToInt32 - преобразуем object в int
+                int id = Convert.ToInt32(row["Id"]);
+                string name = row["Name"].ToString();
+                int age = Convert.ToInt32(row["Age"]);
+
+                Console.WriteLine($"│ {id,-3} │ {name,-12} │ {age,3} │");
+            }
+
+            Console.WriteLine("└─────┴──────────────┴─────┘");
+        }
+
+        static async Task AddNewUserAsync()
         {
             try
             {
@@ -100,7 +137,7 @@ namespace AdoNetTrainee
                 Console.Write("Введите возраст: ");
                 int age = int.Parse(Console.ReadLine());
 
-                int newId = repository.AddUser(name, age);
+                int newId = await repository.AddUserAsync(name, age);
                 Console.WriteLine($"✅ Пользователь добавлен с Id: {newId}");
             }
             catch (FormatException)
@@ -113,14 +150,14 @@ namespace AdoNetTrainee
             }
         }
 
-        static void FindUserById()
+        static async Task FindUserByIdAsync()
         {
             try
             {
                 Console.Write("Введите Id: ");
                 int id = int.Parse(Console.ReadLine());
 
-                var user = repository.GetUserById(id);
+                var user = await repository.GetUserByIdAsync(id);
 
                 if (user != null)
                 {
@@ -140,14 +177,14 @@ namespace AdoNetTrainee
             }
         }
 
-        static void FindUserByName()
+        static async Task FindUserByNameAsync()
         {
             try
             {
-                Console.Write("Введите имя (name): ");
+                Console.Write("Введите имя: ");
                 string name = Console.ReadLine();
 
-                var user = repository.GetUserByName(name);
+                var user = await repository.GetUserByNameAsync(name);
 
                 if (user != null)
                 {
@@ -158,15 +195,58 @@ namespace AdoNetTrainee
                 }
                 else
                 {
-                    Console.WriteLine($"\n⚠️ Пользователь с Name={name} не найден.");
+                    Console.WriteLine($"\n⚠️ Пользователь с Name='{name}' не найден.");
                 }
             }
-            catch (FormatException)
+            catch (Exception ex)
             {
-                Console.WriteLine("❌ Ошибка: некоектное имя!");
+                Console.WriteLine($"❌ Ошибка: {ex.Message}");
             }
         }
-        static void UpdateUser()
+
+        // альтернативный вызов регистронезависимого поиска по имени 
+        static async Task SearchUsersByNameAsync()
+        {
+            try
+            {
+                Console.Write("Введите часть имени для поиска: ");
+                string searchTerm = Console.ReadLine();
+
+                // Если пользователь ничего не ввел - ищем всех
+                if (string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    Console.WriteLine("Вы не ввели имя для поиска. Показываю всех пользователей...");
+                    await ShowAllUsersAsync();
+                    return;
+                }
+
+                var users = await repository.SearchUsersByNameAsync(searchTerm);
+
+                if (users.Count == 0)
+                {
+                    Console.WriteLine($"🔍 Пользователей с именем, содержащим '{searchTerm}', не найдено.");
+                    return;
+                }
+
+                Console.WriteLine($"\n🔍 НАЙДЕНО ПОЛЬЗОВАТЕЛЕЙ: {users.Count}");
+                Console.WriteLine("┌─────┬──────────────┬─────┐");
+                Console.WriteLine("│ Id  │ Name         │ Age │");
+                Console.WriteLine("├─────┼──────────────┼─────┤");
+
+                foreach (var user in users)
+                {
+                    Console.WriteLine($"│ {user.Id,-3} │ {user.Name,-12} │ {user.Age,3} │");
+                }
+
+                Console.WriteLine("└─────┴──────────────┴─────┘");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка: {ex.Message}");
+            }
+        }
+
+        static async Task UpdateUserAsync()
         {
             try
             {
@@ -179,7 +259,7 @@ namespace AdoNetTrainee
                 Console.Write("Введите новый возраст: ");
                 int age = int.Parse(Console.ReadLine());
 
-                bool updated = repository.UpdateUser(id, name, age);
+                bool updated = await repository.UpdateUserAsync(id, name, age);
 
                 if (updated)
                     Console.WriteLine($"✅ Пользователь с Id={id} обновлен!");
@@ -192,14 +272,14 @@ namespace AdoNetTrainee
             }
         }
 
-        static void DeleteUser()
+        static async Task DeleteUserAsync()
         {
             try
             {
                 Console.Write("Введите Id для удаления: ");
                 int id = int.Parse(Console.ReadLine());
 
-                bool deleted = repository.DeleteUser(id);
+                bool deleted = await repository.DeleteUserAsync(id);
 
                 if (deleted)
                     Console.WriteLine($"✅ Пользователь с Id={id} удален!");
