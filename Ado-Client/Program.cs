@@ -1,4 +1,5 @@
-﻿using Microsoft.Data.SqlClient;
+﻿
+using Microsoft.Data.SqlClient;
 using System.Data;
 
 namespace AdoNetTrainee
@@ -7,8 +8,9 @@ namespace AdoNetTrainee
     {
         static string connectionString = @"Data Source=(localdb)\MSSQLLocalDB;Initial Catalog=TraineeDB;Integrated Security=True;";
         static UserRepository repository = new UserRepository(connectionString);
+        static Tests tests = new Tests(connectionString);
 
-        static async Task Main(string[] args)  // <--- Main теперь async
+        static async Task Main(string[] args)
         {
             Console.WriteLine("🏢 СИСТЕМА УПРАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯМИ (ADO.NET + ASYNC)");
             Console.WriteLine("===================================================\n");
@@ -25,6 +27,7 @@ namespace AdoNetTrainee
                 Console.WriteLine("5 - Обновить пользователя");
                 Console.WriteLine("6 - Удалить пользователя по Id");
                 Console.WriteLine("7 - Выход");
+                Console.WriteLine("8 - Тестирование");
                 Console.Write("\nВаш выбор: ");
 
                 string choice = Console.ReadLine();
@@ -63,6 +66,10 @@ namespace AdoNetTrainee
                     case "7":
                         exit = true;
                         Console.WriteLine("До свидания!");
+                        break;
+
+                    case "8":
+                        await TestingSystem();
                         break;
 
                     default:
@@ -290,6 +297,11 @@ namespace AdoNetTrainee
             {
                 Console.WriteLine("❌ Ошибка: Id должен быть числом!");
             }
+        }
+
+        static async Task TestingSystem()
+        {
+            await tests.RunTests();
         }
     }
 }
